@@ -1,12 +1,16 @@
 import psycopg2
 import os
 from flask.cli import load_dotenv
-from decorators.db_connection import DbBaseDecoration
 
 # Lataa ympäristömuuttujat .env-tiedostosta
 load_dotenv()
 
-class PostgresConnection(DbBaseDecoration):
+class PostgresConnection:
+
+    def __init__(self):
+        from decorators.db_connection import DbBaseDecoration
+        self.db_decoration = DbBaseDecoration()
+
     def get_postgres_connection(self):
         connection = psycopg2.connect(
             dbname=os.getenv('POSTGRES_DATABASE'),
