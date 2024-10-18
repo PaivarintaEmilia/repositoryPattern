@@ -1,14 +1,16 @@
 from flask import jsonify
+
+from decorators import db_connection
 from repositories.repository import Repository
 
 
 def get_all_users(db_type):
 
-    # Valitaanko tässä kumpaa tietokantaa käytetään?
-    # db_type = 'postgres'  # tai 'mysql' tarpeen mukaan
+    # täällä avataan yhteys db:seen
+    db_connection.get_connection(db_type)
 
     # Repositoryn instanssi
-    repo = Repository(db_type)
+    repo = Repository()
     # Kutsutaan repo instanssin get_all-metodia
     users = repo.get_all()
     users_json = []

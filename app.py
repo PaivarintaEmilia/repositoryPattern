@@ -1,5 +1,5 @@
-from dotenv import load_dotenv
 from flask import Flask
+from flask.cli import load_dotenv
 
 from controllers import users_controller
 
