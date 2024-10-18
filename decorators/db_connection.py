@@ -1,10 +1,14 @@
-from decorators.postgres_connections import get_postgres_connection
-from decorators.mysql_connection import get_mysql_connection
+from decorators.mysql_connection import MysqlConnection
+from decorators.postgres_connections import PostgresConnection
 
-def get_connection(db_type):
-    if db_type == 'postgres':
-        return get_postgres_connection()
-    elif db_type == 'mysql':
-        return get_mysql_connection()
-    else:
-        raise ValueError("Invalid database type. Choose 'postgres' or 'mysql'.")
+
+class DbBaseDecoration:
+
+    @staticmethod
+    def get_connection(db_type):
+        if db_type == 'mysql':
+            return MysqlConnection().get_mysql_connection()
+        elif db_type == 'postgres':
+            return PostgresConnection().get_postgres_connection()
+        else:
+            raise ValueError("Väärä valittu tietokantatyyppi. Valitse joko postgres tai mysql.")

@@ -1,83 +1,62 @@
+# Selitys tiedonkulusta ohjelmassa ja eri osien tarkoitukset
 
-## Model
 
-`model.py`
+1. Käyttäjä kirjoittaa insomniaan tai postmaniin seuraavan GET-requestin, jonka tarkoituksena on saada kaikki data users-taulusta
 
-- sisältää tietokannan mallit (user ja product 2. teht.)
-- id tulee olla optional, koska add ja update -metodeissa id saadaan vasta tietokannan kyselyn suorittamisen jälkeen 
+- postgres määrittää mitä tietokantaa käyttäjä haluaa käyttää, kun vaihtoehtoina ovat postgres ja mysql
 
 ```
-class User:  
-    def __init__(self, username, firstname, lastname, _id=None):  
-        self.id = _id  
-        self.username = username  
-        self.firstname = firstname  
-        self.lastname = lastname  
-  
-  
-class Product:  
-    def __init__(self, name, description, _id=None):  
-        self.id = _id  
-        self.name = name  
-        self.description = description
+http://127.0.0.1:5000/api/users/postgres
 ```
 
 
-## Repository
+2. App.py
 
-`repositories-package/repository.py`
+- Täällä on määritetty route ja get_users-metodilla tehty yhdistys controllerin get_all_users-metodiin 
+- Parametrinä on db_type parametri mikä on määritetty routessa (postgres)
 
-- hoitaa tietokantaoperaatiot, eli sisältää metodit datan hakemiseen ja käsittelyyn tietokannassa
-- Sisältää luokan, jota kautta tehdään yhdsitäminen tietokantaan
-- Sisältää CRUD-metodit
 
 ```
-from decorators.postgres_connection import get_postgres_connection  
-from decorators.mysql_connection import get_mysql_connection  
-import models  
+from flask.cli import load_dotenv  
+from controllers import users_controller  
   
-class Repository:  
-    def __init__(self, db_type):  
-        self.db_type = db_type  
-        self.connection = self.get_connection()  
+app = Flask(__name__)  
   
-    def get_connection(self):  
-        if self.db_type == 'postgres':  
-            return get_postgres_connection()  
-        elif self.db_type == 'mysql':  
-            return get_mysql_connection()  
-        else:  
-            raise ValueError("Invalid database type. Choose 'postgres' or 'mysql'.")  
+@app.route('/api/users/<db_type>', methods=['GET'])  
+def get_users(db_type):  
+    return users_controller.get_all_users(db_type)  
   
   
-    def get_all(self):  
-        with self.con.cursor() as cur:  
-            cur.execute('SELECT * FROM users')  
-            result = cur.fetchall()  
-            users = []  
-            for user in result:  
-                users.append(models.User(user[0], user[1], user[2], user[3]))  
-  
-            return users
+if __name__ == '__main__':  
+    load_dotenv()  
+    app.run()
 ```
 
 
-## Controllers
+3. Controller
 
-
-- Controlleri käsittelee vain ja ainoastaan req & res
+- controlleri on vain tietojen välittämiseen
+- täällä haetaan myös tietokantaan yhdistämiseen liittyvä data decorator-kansiosta db_connection.py-tiedostosta
+	- db_connection.py tiedostossa periytymisen avulla saadaan haluttu data joko mysql yhdistämistä tai postgres yhdistämistä varten
+- Täällä tehdään myös repositorysta instanssi, jotta saadaan tietokannasta haluttu data
+	- kutsutaan repo-instanssin get_all-metodia ja muutetaan data haluttuun json muotoon, jotta se voidaan lähettää takaisin käyttäjälle 
 
 
 ```
 from flask import jsonify  
+from decorators import db_connection  
 from repositories.repository import Repository  
+  
   
 def get_all_users(db_type):  
   
-    # Valitaanko tässä kumpaa tietokantaa käytetään?  
-    # db_type = 'postgres'  # tai 'mysql' tarpeen mukaan  
-    # Repositoryn instanssi    repo = Repository(db_type)  
-    # Kutsutaan repo instanssin get_all-metodia  
+    # Haetaan yhteys oikeaan tietokantaan. Tarvitaan vain tähän tarkoitukseen niin ei tehdä instanssia.  
+    connection = db_connection.get_connection(db_type)  
+  
+    # Luodaan repositoryn intanssi  
+    repo = Repository(connection)  
+  
+    # Kutsutaan repo instanssin get_all-metodia ja haetaan kaikki käyttäjät  
     users = repo.get_all()  
     users_json = []  
     for user in users:  
@@ -91,83 +70,106 @@ def get_all_users(db_type):
 ```
 
 
-## App.py
 
-- rakennetaan routet
+3.1. Databasen yhdistäminen decoration-kansiosta
+
+
+DbBaseDecoration-class
 
 ```
-from dotenv import load_dotenv  
-from flask import Flask  
-  
-from controllers import users  
-  
-app = Flask(__name__)  
+from decorators.mysql_connection import MysqlConnection  
+from decorators.postgres_connections import PostgresConnection  
   
   
-@app.route('/api/users/<db_type>', methods=['GET'])  
-def get_users(db_type):  
-    return users.get_all_users(db_type)  
-
+class DbBaseDecoration:  
   
-if __name__ == '__main__':  
-    load_dotenv()  
-    app.run()
+    def get_connection(self, db_type):  
+        if db_type == 'mysql':  
+            return MysqlConnection().get_mysql_connection()  
+        elif db_type == 'postgres':  
+            return PostgresConnection().get_postgres_connection()  
+        else:  
+            raise ValueError("Väärä valittu tietokantatyyppi. Valitse joko postgres tai mysql.")
 ```
 
 
-
-## Tiedostos databasen yhdistämistä varten
-
-- decoration package `decorations`
-
-`mysql_connection.py`
+mysql_connection-class
 
 ```
 import mysql.connector  
+from decorators.db_connection import DbBaseDecoration  
   
-def get_mysql_connection():  
-    connection = mysql.connector.connect(  
-        user='your_username',  
-        password='your_password',  
-        host='localhost',  # tai vastaava osoite  
-        database='your_dbname'  
-    )  
-    return connection
+  
+class MysqlConnection(DbBaseDecoration):  
+    def get_mysql_connection(self):  
+        connection = mysql.connector.connect(  
+            user='your_username',  
+            password='your_password',  
+            host='localhost',  # tai vastaava osoite  
+            database='your_dbname'  
+        )  
+        return connection
 ```
 
 
-``postgres_connection.py`
+postgres_connection-class:
 
 ```
 import psycopg2  
 import os  
-from dotenv import load_dotenv  
+from flask.cli import load_dotenv  
+from decorators.db_connection import DbBaseDecoration  
   
 # Lataa ympäristömuuttujat .env-tiedostosta  
 load_dotenv()  
   
-  
-def get_postgres_connection():  
-    connection = psycopg2.connect(  
-        dbname=os.getenv('POSTGRES_DATABASE'),  
-        user=os.getenv('POSTGRES_USER'),  
-        password=os.getenv('POSTGRES_PASSWORD'),  
-        host=os.getenv('POSTGRES_HOST'),  # tai vastaava osoite  
-        port=os.getenv('POSTGRES_PORT')  # Oletusportti PostgreSQL:lle  
-    )  
-    return connection
+class PostgresConnection(DbBaseDecoration):  
+    def get_postgres_connection(self):  
+        connection = psycopg2.connect(  
+            dbname=os.getenv('POSTGRES_DATABASE'),  
+            user=os.getenv('POSTGRES_USER'),  
+            password=os.getenv('POSTGRES_PASSWORD'),  
+            host=os.getenv('POSTGRES_HOST'),  
+            port=os.getenv('POSTGRES_PORT')  
+        )  
+        return connection
 ```
 
 
-## Tiedon kulku ohjelmassa
+3.2.  Repository
+
+- Täällä tehdään vain databasesta tiedon haku 
 
 
-- **Initialization**: When the application starts, it sets up the Flask framework and loads environment variables.
-    
-- **Routing**: The application has a single route for fetching users, which accepts a database type as a URL parameter.
-    
-- **Controller Logic**: The controller creates a `Repository` instance with the specified database type and calls the `get_all` method to retrieve users.
-    
-- **Database Interaction**: The repository manages database connections, executes queries, and transforms the results into `User` model instances.
-    
-- **Response**: The controller formats the user data into JSON and returns it to the client.
+```
+import models  
+  
+class Repository:  
+  
+    def __init__(self, connection):  
+        self.connection = connection  
+  
+    def get_all(self):  
+        users = []  
+        with self.connection.cursor() as cursor:  
+            cursor.execute('SELECT * FROM users')  
+            result = cursor.fetchall()  
+            for user in result:  
+                users.append(models.User(user[0], user[1], user[2], user[3]))  
+  
+            return users
+```
+
+
+3.2.1. Modeli
+
+- Repository saa tiedon minkälaisessa muodossa datan kuuluu olla
+
+```
+class User:  
+    def __init__(self, username, firstname, lastname, _id=None):  
+        self.id = _id  
+        self.username = username  
+        self.firstname = firstname  
+        self.lastname = lastname
+```
